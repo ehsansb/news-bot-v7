@@ -126,7 +126,10 @@
         document.addEventListener('DOMContentLoaded', () => {
             renderModules();
             const editor = document.getElementById('visual-editor');
-            editor.innerHTML = renderBadges(`{{ channel.content_template | safe }}` || "");
+            // FIX: استفاده از رشته ساده برای جلوگیری از تداخل Jinja
+            const tmpl = `{{ channel.content_template | safe }}` || "";
+            editor.innerHTML = renderBadges(tmpl);
+            
             editor.addEventListener('keyup', saveCaretPosition);
             editor.addEventListener('click', (e) => {
                 saveCaretPosition();
@@ -189,6 +192,7 @@
 
         function renderBadges(text) {
             if(!text) return "";
+            // FIX: استفاده از Regex ساده
             return text.replace(/\{\{(.*?)\}\}/g, (match, key) => {
                 return `<span class="var-badge" contenteditable="false" data-key="${key}">${key}</span>`;
             });
@@ -281,7 +285,8 @@
             temp.innerHTML = html;
             temp.querySelectorAll('.var-badge').forEach(node => {
                 const key = node.dataset.key;
-                if(key) node.replaceWith(`{{${key}}}`);
+                // FIX: اینجا تغییر کرد تا با جینجا تداخل نداشته باشد
+                if(key) node.replaceWith('{' + '{' + key + '}' + '}');
             });
             temp.querySelectorAll("br").forEach(br => br.replaceWith("\n"));
             temp.querySelectorAll("div").forEach(div => { if(div.innerHTML.trim()) div.before("\n"); });
