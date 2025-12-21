@@ -5,11 +5,10 @@ from psycopg2.extras import RealDictCursor
 import json
 
 app = Flask(__name__)
-app.secret_key = os.urandom(24)
 
-# خواندن آدرس دیتابیس
+# تنظیمات امنیتی و دیتابیس
+app.secret_key = os.getenv("SECRET_KEY", "CHANGE_THIS_TO_A_LONG_RANDOM_STRING")
 DB_URI = os.getenv("DB_URI")
-# رمز ورود به پنل (پیش‌فرض admin123 است اگر ست نشود)
 ADMIN_PASS = os.getenv("ADMIN_PASS", "admin123")
 
 def get_db():
@@ -20,6 +19,7 @@ def login():
     if request.method == 'POST':
         if request.form.get('password') == ADMIN_PASS:
             session['logged_in'] = True
+            session.permanent = True 
             return redirect('/dashboard')
     return render_template('login.html')
 
@@ -33,10 +33,6 @@ def dashboard():
         channels = cur.fetchall()
         
         # آمار پست‌های امروز
-        cur.execute("SELECT COUNT(*) as cnt FROM news_queue WHERE created_at > NOW() - INTERVAL '1 day'")
-        count = cur.fetchone()['cnt']
-        
-        # محاسبه آمار هر کانال
         for c in channels:
             cur.execute("SELECT COUNT(*) as cnt FROM news_queue WHERE channel_ref_id = %s AND created_at > NOW() - INTERVAL '1 day'", (c['id'],))
             c['daily_usage_count'] = cur.fetchone()['cnt']
@@ -71,11 +67,16 @@ def channel_manager(id):
     
     if not channel: return "Not Found"
     
+    # تابع کمکی برای اطمینان از فرمت JSON
+    def ensure_json(data):
+        if isinstance(data, str): return data
+        return json.dumps(data or [])
+
     return render_template('channel.html', 
                            channel=channel, 
                            variables_json=json.dumps(channel.get('variables_config') or {}),
-                           sources_json=json.dumps(channel.get('rss_config') or []),
-                           crawlers_json=json.dumps(channel.get('crawler_config') or []))
+                           sources_json=ensure_json(channel.get('rss_config')),
+                           crawlers_json=ensure_json(channel.get('crawler_config')))
 
 @app.route('/update_channel/<uuid:id>', methods=['POST'])
 def update_channel(id):
@@ -87,14 +88,17 @@ def update_channel(id):
         
         active = True if data.get('channel_active') == 'true' or data.get('channel_active') == 'on' else False
         
+        # ذخیره تمام اطلاعات شامل آیدی تست و توکن‌ها
         cur.execute("""
             UPDATE channels SET 
             name=%s, interval=%s, active=%s, button_text=%s,
+            telegram_token=%s, channel_id=%s, test_chat_id=%s,
             content_template=%s, variables_config=%s, rss_config=%s, crawler_config=%s
             WHERE id=%s
         """, (
-            data['name'], data['interval'], active,
-            data['button_text'], data['content_template'],
+            data['name'], data['interval'], active, data['button_text'],
+            data['telegram_token'], data['channel_id'], data['test_chat_id'],
+            data['content_template'],
             data['variables_config'], data['rss_config'], data['crawler_config'],
             str(id)
         ))
