@@ -1,6 +1,6 @@
+flask
+gunicorn
+psycopg2-binary
 requests
 feedparser
 beautifulsoup4
-psycopg2-binary
-flask
-gunicorn
