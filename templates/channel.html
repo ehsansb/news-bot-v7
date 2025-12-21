@@ -31,6 +31,11 @@
         .inspector-section { display: none; animation: fadeIn 0.3s; }
         .inspector-section.active { display: block; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        
+        /* استایل دکمه جادویی */
+        .btn-magic { background: linear-gradient(135deg, #6366f1, #a855f7); color: white; border: none; }
+        .btn-magic:hover { opacity: 0.9; color: white; }
+        .spinner-border-sm { width: 1rem; height: 1rem; border-width: 0.15em; }
     </style>
 </head>
 <body>
@@ -40,6 +45,9 @@
             <h5 class="m-0 fw-bold">{{ channel.name }}</h5>
         </div>
         <div class="d-flex align-items-center gap-3">
+            <button onclick="runMagicBatch()" class="btn btn-magic btn-sm px-3 fw-bold shadow-sm" id="btn-magic-all">
+                <i class="fa fa-wand-magic-sparkles"></i> جادوی هوش مصنوعی
+            </button>
             <button onclick="submitForm('save')" class="btn btn-primary btn-sm px-4 fw-bold"><i class="fa fa-save"></i> ذخیره تغییرات</button>
         </div>
     </div>
@@ -78,6 +86,7 @@
                         <div class="mb-3"><label class="form-label small">متن دکمه شیشه‌ای</label><input type="text" id="inp-btn-text" class="form-control form-control-sm" value="{{ channel.button_text or 'مشاهده منبع' }}"></div>
                         <div class="mb-3 p-2 bg-light rounded border"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="inp-active" {% if channel.active %}checked{% endif %}><label class="form-check-label small fw-bold">فعال بودن ربات</label></div></div>
                     </div>
+                    
                     <div id="inspector-rss" class="inspector-section">
                         <div class="d-flex justify-content-between align-items-center mb-3"><h6 class="text-warning m-0"><i class="fa fa-rss me-1"></i> تنظیم RSS</h6><button class="btn btn-sm btn-outline-danger py-0" onclick="deleteActiveObject()">حذف</button></div>
                         <div class="mb-3"><label class="form-label small">آدرس فید</label><input type="text" id="rss-url" class="form-control form-control-sm" dir="ltr" oninput="saveCurrentState()"></div>
@@ -93,10 +102,11 @@
                     <div id="inspector-variable" class="inspector-section">
                         <div class="d-flex justify-content-between align-items-center mb-3"><h6 class="text-primary m-0"><i class="fa fa-puzzle-piece me-1"></i> تنظیم متغیر</h6><button class="btn btn-sm btn-outline-danger py-0" onclick="deleteActiveObject()">حذف</button></div>
                         <div class="mb-3"><label class="form-label small">شناسه</label><input type="text" id="var-key" class="form-control form-control-sm bg-light" readonly></div>
-                        <div class="mb-3"><label class="form-label small">لینک منبع (اختیاری)</label><input type="text" id="var-source" class="form-control form-control-sm" dir="ltr" oninput="saveCurrentState()"></div>
+                        <div class="mb-3"><label class="form-label small">لینک منبع (اختیاری)</label><input type="text" id="var-source" class="form-control form-control-sm" dir="ltr" oninput="saveCurrentState()" placeholder="https://..."></div>
                         <div class="mb-3"><label class="form-label small">روش استخراج</label><select id="var-method" class="form-select form-select-sm" onchange="updateUIForMethod(); saveCurrentState();"><option value="css">CSS Selector</option><option value="regex">Regex</option><option value="json">JSON Path</option><option value="ai">هوش مصنوعی (AI)</option></select></div>
-                        <div class="mb-3"><label class="form-label small" id="lbl-command">دستور / پرامپت</label><textarea id="var-command" class="form-control form-control-sm mt-1" rows="3" oninput="saveCurrentState()"></textarea></div>
-                        <button class="btn btn-secondary btn-sm w-100" onclick="deselectAll()">بازگشت</button>
+                        <div class="mb-3"><label class="form-label small" id="lbl-command">توضیح برای هوش مصنوعی (چی می‌خوای؟)</label><textarea id="var-command" class="form-control form-control-sm mt-1" rows="3" oninput="saveCurrentState()"></textarea></div>
+                        <div class="text-muted small" style="font-size: 0.75rem"><i class="fa fa-info-circle"></i> برای استفاده از جادو، لینک منبع را وارد کنید و در کادر بالا بنویسید دنبال چه هستید (مثلاً: قیمت انس جهانی).</div>
+                        <button class="btn btn-secondary btn-sm w-100 mt-3" onclick="deselectAll()">بازگشت</button>
                     </div>
                 </div>
             </div>
@@ -111,6 +121,10 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
+        // --- تنظیمات اتصال ---
+        // لطفا لینک وب‌هوک خود را در خط زیر جایگزین کنید (بسیار مهم)
+        const N8N_WEBHOOK_URL = "LINK_WEBHOOK_RA_INJA_BEZARID"; 
+
         let currentConfig = {};
         let rssList = [];
         let crawlerList = [];
@@ -126,7 +140,6 @@
         document.addEventListener('DOMContentLoaded', () => {
             renderModules();
             const editor = document.getElementById('visual-editor');
-            // FIX: استفاده از رشته ساده برای جلوگیری از تداخل Jinja
             const tmpl = `{{ channel.content_template | safe }}` || "";
             editor.innerHTML = renderBadges(tmpl);
             
@@ -145,6 +158,72 @@
             });
         });
 
+        // --- هوش مصنوعی: منطق دسته‌بندی و ارسال ---
+        async function runMagicBatch() {
+            const groups = {};
+            let hasItems = false;
+
+            for (const [key, conf] of Object.entries(currentConfig)) {
+                if (conf.source && conf.source.startsWith('http') && conf.command) {
+                    if (!groups[conf.source]) groups[conf.source] = [];
+                    groups[conf.source].push({
+                        id: key,
+                        desc: conf.command,
+                        method: conf.method || 'css'
+                    });
+                    hasItems = true;
+                }
+            }
+
+            if (!hasItems) {
+                alert("لطفاً برای متغیرها 'لینک منبع' و 'توضیحات' را وارد کنید.");
+                return;
+            }
+
+            const btn = document.getElementById('btn-magic-all');
+            const originalText = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> در حال جادو...`;
+
+            try {
+                for (const [url, items] of Object.entries(groups)) {
+                    await processGroup(url, items);
+                }
+                alert("✨ انجام شد! کدها بروزرسانی شدند.");
+                if (selection.type === 'variable') {
+                    selectVariable(selection.id); 
+                }
+            } catch (err) {
+                console.error(err);
+                alert("خطا در ارتباط با هوش مصنوعی: " + err.message);
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            }
+        }
+
+        async function processGroup(url, items) {
+            try {
+                const response = await fetch(N8N_WEBHOOK_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url: url, items: items })
+                });
+
+                if (!response.ok) throw new Error("Server Error");
+
+                const data = await response.json();
+                for (const [key, code] of Object.entries(data)) {
+                    if (currentConfig[key]) {
+                        currentConfig[key].command = code; 
+                    }
+                }
+            } catch (e) {
+                console.error(`Failed for ${url}`, e);
+            }
+        }
+
+        // --- توابع کمکی UI ---
         function saveCurrentState() {
             if (!selection.type) return;
             if (selection.type === 'rss') rssList[selection.id].url = document.getElementById('rss-url').value;
@@ -192,7 +271,6 @@
 
         function renderBadges(text) {
             if(!text) return "";
-            // FIX: استفاده از Regex ساده
             return text.replace(/\{\{(.*?)\}\}/g, (match, key) => {
                 return `<span class="var-badge" contenteditable="false" data-key="${key}">${key}</span>`;
             });
@@ -285,7 +363,6 @@
             temp.innerHTML = html;
             temp.querySelectorAll('.var-badge').forEach(node => {
                 const key = node.dataset.key;
-                // FIX: اینجا تغییر کرد تا با جینجا تداخل نداشته باشد
                 if(key) node.replaceWith('{' + '{' + key + '}' + '}');
             });
             temp.querySelectorAll("br").forEach(br => br.replaceWith("\n"));
