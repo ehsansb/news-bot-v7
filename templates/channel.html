@@ -1,153 +1,131 @@
 <!DOCTYPE html>
-<html lang="fa" dir="rtl">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>مدیریت {{ channel.name }}</title>
-    <link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet">
+    <title>{{ 'Edit' if channel else 'Add' }} Channel</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        body { background-color: #f0f2f5; font-family: 'Vazirmatn', sans-serif; min-height: 100vh; display: flex; flex-direction: column; }
-        .main-container { flex: 1; padding: 15px; }
-        .col-tools { max-height: calc(100vh - 100px); overflow-y: auto; }
-        .col-canvas { display: flex; flex-direction: column; background: #fff; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); overflow: hidden; min-height: 500px; }
-        .col-inspector { background: #fff; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); padding: 20px; overflow-y: auto; }
-        
-        .tool-card { background: white; border-radius: 12px; padding: 15px; cursor: pointer; transition: 0.2s; border: 1px solid transparent; display: flex; align-items: center; gap: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); margin-bottom: 10px; }
-        .tool-card:hover { transform: translateY(-2px); box-shadow: 0 5px 10px rgba(0,0,0,0.1); border-color: #3b82f6; }
-        .tool-icon { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; color: white; }
-        
-        .modules-area { min-height: 60px; background: #f8f9fa; border-bottom: 1px solid #eee; padding: 10px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
-        .module-chip { background: white; border: 1px solid #ddd; padding: 5px 12px; border-radius: 20px; font-size: 0.85rem; display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; transition: 0.2s; }
-        .module-chip:hover { border-color: #666; background: #fff; }
-        .module-chip.selected { border-color: #0d6efd; background: #e7f1ff; color: #0d6efd; }
-        
-        .visual-editor { flex-grow: 1; padding: 20px; outline: none; overflow-y: auto; font-size: 1rem; line-height: 1.6; white-space: pre-wrap; direction: rtl; }
-        .visual-editor:empty:before { content: 'متن پست را اینجا بنویسید...'; color: #aaa; }
-        
-        .var-badge { padding: 2px 8px; border-radius: 6px; font-size: 0.9em; cursor: pointer; user-select: none; display: inline-block; margin: 0 2px; color:white; background: #8b5cf6; }
-        .var-badge.selected { box-shadow: 0 0 0 3px rgba(0,0,0,0.2); transform: scale(1.05); }
-        
-        .top-bar { height: 60px; background: white; padding: 0 20px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.05); margin-bottom: 15px; }
-        
-        .inspector-section { display: none; }
-        .inspector-section.active { display: block; animation: fadeIn 0.3s; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
-        
-        .btn-magic { background: linear-gradient(135deg, #6366f1, #a855f7); color: white; border: none; }
-        .btn-magic:hover { opacity: 0.9; color: white; }
-        
-        .flash-success { animation: flashGreen 1s ease-out; }
-        @keyframes flashGreen { 0% { background-color: #86efac; } 100% { background-color: white; } }
-        
-        .section-divider { border-top: 1px dashed #ddd; margin: 15px 0; }
+        body { background-color: #f8f9fa; }
+        .card { border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .magic-btn { background: linear-gradient(45deg, #6f42c1, #007bff); color: white; border: none; }
+        .magic-btn:hover { opacity: 0.9; color: white; }
     </style>
 </head>
-<body>
-    <!-- نوار بالا -->
-    <div class="top-bar">
-        <div class="d-flex align-items-center gap-3">
-            <a href="/dashboard" class="btn btn-light btn-sm text-muted"><i class="fa fa-arrow-right"></i> بازگشت</a>
-            <h5 class="m-0 fw-bold">{{ channel.name }}</h5>
-        </div>
-        <div class="d-flex align-items-center gap-3">
-            <button onclick="sendTestMessage()" id="btn-test" class="btn btn-outline-secondary btn-sm px-3 fw-bold"><i class="fa fa-paper-plane"></i> تست قالب</button>
-            <button onclick="runMagicBatch()" id="btn-magic-all" class="btn btn-magic btn-sm px-3 fw-bold shadow-sm"><i class="fa fa-wand-magic-sparkles"></i> جادوی هوش مصنوعی</button>
-            <button onclick="submitForm('save')" class="btn btn-primary btn-sm px-4 fw-bold"><i class="fa fa-save"></i> ذخیره</button>
-        </div>
-    </div>
-
-    <div class="container-fluid main-container">
-        <div class="row h-100 g-3">
-            <!-- ستون ابزارها -->
-            <div class="col-lg-2 col-md-3 col-12 col-tools order-2 order-md-1">
-                <div class="text-muted small fw-bold px-2 mb-2">جعبه ابزار</div>
-                <div class="tool-card" onclick="addRSS()"><div class="tool-icon bg-warning"><i class="fa fa-rss"></i></div><div><div class="fw-bold small">خوراک خبری</div></div></div>
-                <div class="tool-card" onclick="addCrawler()"><div class="tool-icon bg-danger"><i class="fa fa-spider"></i></div><div><div class="fw-bold small">خزنده فایل</div></div></div>
-                <div class="tool-card" onclick="addVariable()"><div class="tool-icon" style="background:#8b5cf6"><i class="fa fa-puzzle-piece"></i></div><div><div class="fw-bold small">متغیر هوشمند</div></div></div>
-            </div>
-
-            <!-- بوم طراحی -->
-            <div class="col-lg-7 col-md-6 col-12 order-1 order-md-2">
-                <div class="col-canvas h-100">
-                    <div class="modules-area" id="modules-container"></div>
-                    <div class="p-2 border-bottom border-top bg-light d-flex justify-content-between">
-                        <small class="text-muted">ویرایشگر قالب متن</small>
-                        <small id="status-text" class="text-muted">آماده</small>
+<body class="container py-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card p-4">
+                <h2 class="mb-4 text-center">{{ 'Edit' if channel else 'Create New' }} Channel</h2>
+                <form method="POST">
+                    <div class="mb-3">
+                        <label class="form-label">Channel Name</label>
+                        <input type="text" name="name" class="form-control" value="{{ channel.name if channel else '' }}" required placeholder="My Awesome News">
                     </div>
-                    <div id="visual-editor" class="visual-editor" contenteditable="true"></div>
-                </div>
-            </div>
 
-            <!-- تنظیمات -->
-            <div class="col-lg-3 col-md-3 col-12 order-3">
-                <div class="col-inspector h-100">
-                    <!-- تنظیمات عمومی (اصلاح شده) -->
-                    <div id="inspector-global" class="inspector-section active">
-                        <h6 class="fw-bold mb-3">⚙️ تنظیمات کانال</h6>
-                        
-                        <div class="mb-3"><label class="form-label small">نام نمایشی</label><input type="text" id="inp-name" class="form-control form-control-sm" value="{{ channel.name }}"></div>
-                        
-                        <!-- تنظیمات حیاتی -->
-                        <div class="p-2 mb-3 border rounded bg-light">
-                            <label class="form-label small fw-bold text-primary">تنظیمات ربات</label>
-                            <div class="mb-2"><input type="text" id="inp-token" class="form-control form-control-sm" style="font-family:monospace; font-size:0.8rem" dir="ltr" value="{{ channel.telegram_token }}" placeholder="Bot Token"></div>
-                            <div class="mb-2"><input type="text" id="inp-channel-id" class="form-control form-control-sm" dir="ltr" value="{{ channel.channel_id }}" placeholder="@ChannelID"></div>
+                    <div class="mb-3">
+                        <label class="form-label">RSS / Source URL</label>
+                        <input type="url" name="rss_url" id="rss_url" class="form-control" value="{{ channel.rss_url if channel else '' }}" required placeholder="https://site.com/rss">
+                    </div>
+
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-6">
+                            <label class="form-label">Bot Token</label>
+                            <input type="password" name="bot_token" class="form-control" value="{{ channel.bot_token if channel else '' }}" required>
                         </div>
+                        <div class="col-md-6">
+                            <label class="form-label">Telegram Chat ID</label>
+                            <input type="text" name="telegram_chat_id" class="form-control" value="{{ channel.telegram_chat_id if channel else '' }}" required placeholder="@mychannel">
+                        </div>
+                    </div>
 
-                        <div class="mb-3"><label class="form-label small">آیدی عددی مدیر (برای تست)</label><input type="text" id="inp-test-id" class="form-control form-control-sm" dir="ltr" value="{{ channel.test_chat_id or '' }}" placeholder="Example: 123456789"></div>
-                        
-                        <div class="section-divider"></div>
-                        
-                        <div class="mb-3"><label class="form-label small">بازه اسکن (دقیقه)</label><input type="number" id="inp-interval" class="form-control form-control-sm" value="{{ channel.interval }}"></div>
-                        <div class="mb-3"><label class="form-label small">متن دکمه شیشه‌ای</label><input type="text" id="inp-btn-text" class="form-control form-control-sm" value="{{ channel.button_text or 'مشاهده منبع' }}"></div>
-                        
-                        <div class="mb-3 p-2 bg-light rounded border"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="inp-active" {% if channel.active %}checked{% endif %}><label class="form-check-label small fw-bold">فعال بودن ربات</label></div></div>
+                    <hr>
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5 class="m-0">Scraper Variables</h5>
+                        <button type="button" class="btn magic-btn btn-sm" onclick="runMagic()">✨ Magic Auto-Detect</button>
                     </div>
-                    
-                    <!-- بقیه اینسپکتورها -->
-                    <div id="inspector-rss" class="inspector-section">
-                        <div class="d-flex justify-content-between align-items-center mb-3"><h6 class="text-warning m-0"><i class="fa fa-rss me-1"></i> تنظیم RSS</h6><button class="btn btn-sm btn-outline-danger py-0" onclick="deleteActiveObject()">حذف</button></div>
-                        <div class="mb-3"><label class="form-label small">آدرس فید</label><input type="text" id="rss-url" class="form-control form-control-sm" dir="ltr" oninput="saveCurrentState()"></div>
-                        <button class="btn btn-secondary btn-sm w-100" onclick="deselectAll()">بازگشت</button>
+
+                    <div class="row g-3 mb-3 border p-3 rounded bg-light">
+                        <div class="col-md-4">
+                            <input type="text" name="var_1_name" class="form-control" value="{{ channel.var_1_name if channel else 'Title' }}" placeholder="Var 1 Name">
+                        </div>
+                        <div class="col-md-8">
+                            <input type="text" name="var_1_css" id="var_1_css" class="form-control" value="{{ channel.var_1_css if channel else '' }}" placeholder="CSS Selector (e.g. h1.title)">
+                        </div>
                     </div>
-                    <div id="inspector-crawler" class="inspector-section">
-                        <div class="d-flex justify-content-between align-items-center mb-3"><h6 class="text-danger m-0"><i class="fa fa-spider me-1"></i> تنظیم خزنده</h6><button class="btn btn-sm btn-outline-danger py-0" onclick="deleteActiveObject()">حذف</button></div>
-                        <div class="mb-3"><label class="form-label small">لینک هدف</label><input type="text" id="cr-url" class="form-control form-control-sm" dir="ltr" oninput="saveCurrentState()"></div>
-                        <div class="mb-3"><label class="form-label small">پسوندها</label><input type="text" id="cr-ext" class="form-control form-control-sm" dir="ltr" value="pdf,zip" oninput="saveCurrentState()"></div>
-                        <div class="mb-3"><label class="form-label small">حالت</label><select id="cr-mode" class="form-select form-select-sm" onchange="saveCurrentState()"><option value="direct">لینک مستقیم</option><option value="stream">آپلود استریم</option></select></div>
-                        <button class="btn btn-secondary btn-sm w-100" onclick="deselectAll()">بازگشت</button>
+
+                    <div class="row g-3 mb-4 border p-3 rounded bg-light">
+                        <div class="col-md-4">
+                            <input type="text" name="var_2_name" class="form-control" value="{{ channel.var_2_name if channel else 'Content' }}" placeholder="Var 2 Name">
+                        </div>
+                        <div class="col-md-8">
+                            <input type="text" name="var_2_css" id="var_2_css" class="form-control" value="{{ channel.var_2_css if channel else '' }}" placeholder="CSS Selector (e.g. div.article-body)">
+                        </div>
                     </div>
-                    <div id="inspector-variable" class="inspector-section">
-                        <div class="d-flex justify-content-between align-items-center mb-3"><h6 class="text-primary m-0"><i class="fa fa-puzzle-piece me-1"></i> تنظیم متغیر</h6><button class="btn btn-sm btn-outline-danger py-0" onclick="deleteActiveObject()">حذف</button></div>
-                        <div class="mb-3"><label class="form-label small">شناسه</label><input type="text" id="var-key" class="form-control form-control-sm bg-light" readonly></div>
-                        <div class="mb-3"><label class="form-label small">لینک منبع</label><input type="text" id="var-source" class="form-control form-control-sm" dir="ltr" oninput="saveCurrentState()" placeholder="https://..."></div>
-                        <div class="mb-3"><label class="form-label small">روش استخراج</label><select id="var-method" class="form-select form-select-sm" onchange="updateUIForMethod(); saveCurrentState();"><option value="css">CSS Selector</option><option value="regex">Regex</option><option value="json">JSON Path</option><option value="ai">هوش مصنوعی (AI)</option></select></div>
-                        <div class="mb-3"><label class="form-label small" id="lbl-command">دستور / پرامپت هوش مصنوعی</label><textarea id="var-command" class="form-control form-control-sm mt-1" rows="3" oninput="saveCurrentState()"></textarea></div>
-                        <button class="btn btn-secondary btn-sm w-100" onclick="deselectAll()">بازگشت</button>
+
+                    <div class="mb-4">
+                        <label class="form-label">Admin Test Chat ID (For Previews)</label>
+                        <div class="input-group">
+                            <input type="text" name="test_chat_id" id="test_chat_id" class="form-control" value="{{ channel.test_chat_id if channel else '' }}" placeholder="Your Telegram ID">
+                            <button type="button" class="btn btn-outline-secondary" onclick="runTest()">Test Message</button>
+                        </div>
                     </div>
-                </div>
+
+                    <div class="d-flex justify-content-between">
+                        <a href="/" class="btn btn-light">Cancel</a>
+                        <button type="submit" class="btn btn-primary px-5">Save Channel</button>
+                    </div>
+                </form>
             </div>
         </div>
     </div>
 
-    <!-- فرم مخفی برای ارسال دیتا -->
-    <form id="main-form" method="POST" action="/update_channel/{{ channel.id }}" style="display:none">
-        <input name="name" id="form-name">
-        <input name="telegram_token" id="form-token">
-        <input name="channel_id" id="form-channel-id">
-        <input name="test_chat_id" id="form-test-id">
-        <input name="interval" id="form-interval">
-        <input name="channel_active" id="form-active">
-        <input name="button_text" id="form-btn-text">
-        <textarea name="content_template" id="form-template"></textarea>
-        <textarea name="variables_config" id="form-config"></textarea>
-        <textarea name="rss_config" id="form-rss"></textarea>
-        <textarea name="crawler_config" id="form-crawler"></textarea>
-        <input name="action_type" id="form-action">
-    </form>
-
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        // ============================
+        async function runMagic() {
+            const rssUrl = document.getElementById('rss_url').value;
+            if(!rssUrl) return alert("Please enter RSS URL first");
+
+            const btn = event.target;
+            btn.innerText = "Scanning...";
+            btn.disabled = true;
+
+            try {
+                const response = await fetch('/proxy/magic', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ url: rssUrl })
+                });
+                const data = await response.json();
+                
+                if(data.var_1_css) document.getElementById('var_1_css').value = data.var_1_css;
+                if(data.var_2_css) document.getElementById('var_2_css').value = data.var_2_css;
+                alert("Magic detection complete!");
+            } catch (e) {
+                alert("Magic failed. Check n8n logs.");
+            } finally {
+                btn.innerText = "✨ Magic Auto-Detect";
+                btn.disabled = false;
+            }
+        }
+
+        async function runTest() {
+            const chatId = document.getElementById('test_chat_id').value;
+            if(!chatId) return alert("Enter your Test Chat ID");
+
+            try {
+                await fetch('/proxy/test', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ 
+                        chat_id: chatId,
+                        message: "✅ Test successful from Admin Panel"
+                    })
+                });
+                alert("Test request sent to n8n");
+            } catch (e) {
+                alert("Test failed.");
+            }
+        }
+    </script>
+</body>
+</html>
