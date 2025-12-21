@@ -1,130 +1,315 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="fa" dir="rtl">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{{ 'Edit' if channel else 'Add' }} Channel</title>
+    <title>مدیریت کانال</title>
+    <link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
     <style>
-        body { background-color: #f8f9fa; }
-        .card { border-radius: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
-        .magic-btn { background: linear-gradient(45deg, #6f42c1, #007bff); color: white; border: none; }
-        .magic-btn:hover { opacity: 0.9; color: white; }
+        body { background-color: #f0f2f5; font-family: 'Vazirmatn', sans-serif; min-height: 100vh; display: flex; flex-direction: column; }
+        .main-container { flex: 1; padding: 15px; }
+        .col-tools { max-height: calc(100vh - 100px); overflow-y: auto; }
+        .col-canvas { display: flex; flex-direction: column; background: #fff; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); overflow: hidden; min-height: 500px; }
+        .col-inspector { background: #fff; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); padding: 20px; overflow-y: auto; }
+        .tool-card { background: white; border-radius: 12px; padding: 15px; cursor: pointer; transition: 0.2s; border: 1px solid transparent; display: flex; align-items: center; gap: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); margin-bottom: 10px; }
+        .tool-card:hover { transform: translateY(-2px); box-shadow: 0 5px 10px rgba(0,0,0,0.1); border-color: #3b82f6; }
+        .modules-area { min-height: 60px; background: #f8f9fa; border-bottom: 1px solid #eee; padding: 10px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+        .module-chip { background: white; border: 1px solid #ddd; padding: 5px 12px; border-radius: 20px; font-size: 0.85rem; display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; transition: 0.2s; }
+        .module-chip.selected { border-color: #0d6efd; background: #e7f1ff; color: #0d6efd; }
+        .visual-editor { flex-grow: 1; padding: 20px; outline: none; overflow-y: auto; font-size: 1rem; line-height: 1.6; white-space: pre-wrap; direction: rtl; }
+        .var-badge { padding: 2px 8px; border-radius: 6px; font-size: 0.9em; cursor: pointer; user-select: none; display: inline-block; margin: 0 2px; color:white; background: #8b5cf6; }
+        .var-badge.selected { box-shadow: 0 0 0 3px rgba(0,0,0,0.2); transform: scale(1.05); }
+        .top-bar { height: 60px; background: white; padding: 0 20px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 1px 3px rgba(0,0,0,0.05); margin-bottom: 15px; }
+        .inspector-section { display: none; }
+        .inspector-section.active { display: block; animation: fadeIn 0.3s; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        .btn-magic { background: linear-gradient(135deg, #6366f1, #a855f7); color: white; border: none; }
+        .btn-magic:hover { opacity: 0.9; color: white; }
+        .flash-success { animation: flashGreen 1s ease-out; }
+        @keyframes flashGreen { 0% { background-color: #86efac; } 100% { background-color: white; } }
+        .section-divider { border-top: 1px dashed #ddd; margin: 15px 0; }
     </style>
 </head>
-<body class="container py-5">
-    <div class="row justify-content-center">
-        <div class="col-md-8">
-            <div class="card p-4">
-                <h2 class="mb-4 text-center">{{ 'Edit' if channel else 'Create New' }} Channel</h2>
-                <form method="POST">
-                    <div class="mb-3">
-                        <label class="form-label">Channel Name</label>
-                        <input type="text" name="name" class="form-control" value="{{ channel.name if channel else '' }}" required placeholder="My Awesome News">
-                    </div>
+<body>
+    <div class="top-bar">
+        <div class="d-flex align-items-center gap-3">
+            <a href="/dashboard" class="btn btn-light btn-sm text-muted"><i class="fa fa-arrow-right"></i> بازگشت</a>
+            <h5 class="m-0 fw-bold">{{ channel.name }}</h5>
+        </div>
+        <div class="d-flex align-items-center gap-3">
+            <button onclick="sendTestMessage()" id="btn-test" class="btn btn-outline-secondary btn-sm px-3 fw-bold"><i class="fa fa-paper-plane"></i> تست قالب</button>
+            <button onclick="runMagicBatch()" id="btn-magic-all" class="btn btn-magic btn-sm px-3 fw-bold shadow-sm"><i class="fa fa-wand-magic-sparkles"></i> جادوی هوش مصنوعی</button>
+            <button onclick="submitForm('save')" class="btn btn-primary btn-sm px-4 fw-bold"><i class="fa fa-save"></i> ذخیره</button>
+        </div>
+    </div>
 
-                    <div class="mb-3">
-                        <label class="form-label">RSS / Source URL</label>
-                        <input type="url" name="rss_url" id="rss_url" class="form-control" value="{{ channel.rss_url if channel else '' }}" required placeholder="https://site.com/rss">
-                    </div>
+    <div class="container-fluid main-container">
+        <div class="row h-100 g-3">
+            <div class="col-lg-2 col-md-3 col-12 col-tools order-2 order-md-1">
+                <div class="text-muted small fw-bold px-2 mb-2">جعبه ابزار</div>
+                <div class="tool-card" onclick="addRSS()"><div class="tool-icon bg-warning"><i class="fa fa-rss"></i></div><div><div class="fw-bold small">خوراک خبری</div></div></div>
+                <div class="tool-card" onclick="addCrawler()"><div class="tool-icon bg-danger"><i class="fa fa-spider"></i></div><div><div class="fw-bold small">خزنده فایل</div></div></div>
+                <div class="tool-card" onclick="addVariable()"><div class="tool-icon" style="background:#8b5cf6"><i class="fa fa-puzzle-piece"></i></div><div><div class="fw-bold small">متغیر هوشمند</div></div></div>
+            </div>
 
-                    <div class="row g-3 mb-4">
-                        <div class="col-md-6">
-                            <label class="form-label">Bot Token</label>
-                            <input type="password" name="bot_token" class="form-control" value="{{ channel.bot_token if channel else '' }}" required>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label">Telegram Chat ID</label>
-                            <input type="text" name="telegram_chat_id" class="form-control" value="{{ channel.telegram_chat_id if channel else '' }}" required placeholder="@mychannel">
-                        </div>
+            <div class="col-lg-7 col-md-6 col-12 order-1 order-md-2">
+                <div class="col-canvas h-100">
+                    <div class="modules-area" id="modules-container"></div>
+                    <div class="p-2 border-bottom border-top bg-light d-flex justify-content-between">
+                        <small class="text-muted">ویرایشگر قالب متن</small>
+                        <small id="status-text" class="text-muted">آماده</small>
                     </div>
+                    <div id="visual-editor" class="visual-editor" contenteditable="true"></div>
+                </div>
+            </div>
 
-                    <hr>
-                    <div class="d-flex justify-content-between align-items-center mb-3">
-                        <h5 class="m-0">Scraper Variables</h5>
-                        <button type="button" class="btn magic-btn btn-sm" onclick="runMagic()">✨ Magic Auto-Detect</button>
-                    </div>
+            <div class="col-lg-3 col-md-3 col-12 order-3">
+                <div class="col-inspector h-100">
+                    <div id="inspector-global" class="inspector-section active">
+                        <h6 class="fw-bold mb-3">⚙️ تنظیمات کانال</h6>
+                        <div class="mb-3"><label class="form-label small">نام نمایشی</label><input type="text" id="inp-name" class="form-control form-control-sm" value="{{ channel.name }}"></div>
+                        
+                        <div class="p-2 mb-3 border rounded bg-light">
+                            <label class="form-label small fw-bold text-primary">تنظیمات ربات</label>
+                            <div class="mb-2"><input type="text" id="inp-token" class="form-control form-control-sm" style="font-family:monospace; font-size:0.8rem" dir="ltr" value="{{ channel.telegram_token }}" placeholder="Bot Token"></div>
+                            <div class="mb-2"><input type="text" id="inp-channel-id" class="form-control form-control-sm" dir="ltr" value="{{ channel.channel_id }}" placeholder="@ChannelID"></div>
+                        </div>
 
-                    <div class="row g-3 mb-3 border p-3 rounded bg-light">
-                        <div class="col-md-4">
-                            <input type="text" name="var_1_name" class="form-control" value="{{ channel.var_1_name if channel else 'Title' }}" placeholder="Var 1 Name">
-                        </div>
-                        <div class="col-md-8">
-                            <input type="text" name="var_1_css" id="var_1_css" class="form-control" value="{{ channel.var_1_css if channel else '' }}" placeholder="CSS Selector (e.g. h1.title)">
-                        </div>
+                        <div class="mb-3"><label class="form-label small">آیدی عددی مدیر (برای تست)</label><input type="text" id="inp-test-id" class="form-control form-control-sm" dir="ltr" value="{{ channel.test_chat_id or '' }}" placeholder="Example: 123456789"></div>
+                        <div class="section-divider"></div>
+                        <div class="mb-3"><label class="form-label small">بازه اسکن (دقیقه)</label><input type="number" id="inp-interval" class="form-control form-control-sm" value="{{ channel.interval }}"></div>
+                        <div class="mb-3"><label class="form-label small">متن دکمه شیشه‌ای</label><input type="text" id="inp-btn-text" class="form-control form-control-sm" value="{{ channel.button_text or 'مشاهده منبع' }}"></div>
+                        <div class="mb-3 p-2 bg-light rounded border"><div class="form-check form-switch"><input class="form-check-input" type="checkbox" id="inp-active" {% if channel.active %}checked{% endif %}><label class="form-check-label small fw-bold">فعال بودن ربات</label></div></div>
                     </div>
-
-                    <div class="row g-3 mb-4 border p-3 rounded bg-light">
-                        <div class="col-md-4">
-                            <input type="text" name="var_2_name" class="form-control" value="{{ channel.var_2_name if channel else 'Content' }}" placeholder="Var 2 Name">
-                        </div>
-                        <div class="col-md-8">
-                            <input type="text" name="var_2_css" id="var_2_css" class="form-control" value="{{ channel.var_2_css if channel else '' }}" placeholder="CSS Selector (e.g. div.article-body)">
-                        </div>
+                    
+                    <div id="inspector-rss" class="inspector-section">
+                        <div class="d-flex justify-content-between align-items-center mb-3"><h6 class="text-warning m-0"><i class="fa fa-rss me-1"></i> تنظیم RSS</h6><button class="btn btn-sm btn-outline-danger py-0" onclick="deleteActiveObject()">حذف</button></div>
+                        <div class="mb-3"><label class="form-label small">آدرس فید</label><input type="text" id="rss-url" class="form-control form-control-sm" dir="ltr" oninput="saveCurrentState()"></div>
+                        <button class="btn btn-secondary btn-sm w-100" onclick="deselectAll()">بازگشت</button>
                     </div>
-
-                    <div class="mb-4">
-                        <label class="form-label">Admin Test Chat ID (For Previews)</label>
-                        <div class="input-group">
-                            <input type="text" name="test_chat_id" id="test_chat_id" class="form-control" value="{{ channel.test_chat_id if channel else '' }}" placeholder="Your Telegram ID">
-                            <button type="button" class="btn btn-outline-secondary" onclick="runTest()">Test Message</button>
-                        </div>
+                    <div id="inspector-crawler" class="inspector-section">
+                        <div class="d-flex justify-content-between align-items-center mb-3"><h6 class="text-danger m-0"><i class="fa fa-spider me-1"></i> تنظیم خزنده</h6><button class="btn btn-sm btn-outline-danger py-0" onclick="deleteActiveObject()">حذف</button></div>
+                        <div class="mb-3"><label class="form-label small">لینک هدف</label><input type="text" id="cr-url" class="form-control form-control-sm" dir="ltr" oninput="saveCurrentState()"></div>
+                        <div class="mb-3"><label class="form-label small">پسوندها</label><input type="text" id="cr-ext" class="form-control form-control-sm" dir="ltr" value="pdf,zip" oninput="saveCurrentState()"></div>
+                        <div class="mb-3"><label class="form-label small">حالت</label><select id="cr-mode" class="form-select form-select-sm" onchange="saveCurrentState()"><option value="direct">لینک مستقیم</option><option value="stream">آپلود استریم</option></select></div>
+                        <button class="btn btn-secondary btn-sm w-100" onclick="deselectAll()">بازگشت</button>
                     </div>
-
-                    <div class="d-flex justify-content-between">
-                        <a href="/" class="btn btn-light">Cancel</a>
-                        <button type="submit" class="btn btn-primary px-5">Save Channel</button>
+                    <div id="inspector-variable" class="inspector-section">
+                        <div class="d-flex justify-content-between align-items-center mb-3"><h6 class="text-primary m-0"><i class="fa fa-puzzle-piece me-1"></i> تنظیم متغیر</h6><button class="btn btn-sm btn-outline-danger py-0" onclick="deleteActiveObject()">حذف</button></div>
+                        <div class="mb-3"><label class="form-label small">شناسه</label><input type="text" id="var-key" class="form-control form-control-sm bg-light" readonly></div>
+                        <div class="mb-3"><label class="form-label small">لینک منبع</label><input type="text" id="var-source" class="form-control form-control-sm" dir="ltr" oninput="saveCurrentState()" placeholder="https://..."></div>
+                        <div class="mb-3"><label class="form-label small">روش استخراج</label><select id="var-method" class="form-select form-select-sm" onchange="updateUIForMethod(); saveCurrentState();"><option value="css">CSS Selector</option><option value="regex">Regex</option><option value="json">JSON Path</option><option value="ai">هوش مصنوعی (AI)</option></select></div>
+                        <div class="mb-3"><label class="form-label small" id="lbl-command">دستور / پرامپت هوش مصنوعی</label><textarea id="var-command" class="form-control form-control-sm mt-1" rows="3" oninput="saveCurrentState()"></textarea></div>
+                        <button class="btn btn-secondary btn-sm w-100" onclick="deselectAll()">بازگشت</button>
                     </div>
-                </form>
+                </div>
             </div>
         </div>
     </div>
 
+    <form id="main-form" method="POST" action="/update_channel/{{ channel.id }}" style="display:none">
+        <input name="name" id="form-name">
+        <input name="telegram_token" id="form-token">
+        <input name="channel_id" id="form-channel-id">
+        <input name="test_chat_id" id="form-test-id">
+        <input name="interval" id="form-interval">
+        <input name="channel_active" id="form-active">
+        <input name="button_text" id="form-btn-text">
+        <textarea name="content_template" id="form-template"></textarea>
+        <textarea name="variables_config" id="form-config"></textarea>
+        <textarea name="rss_config" id="form-rss"></textarea>
+        <textarea name="crawler_config" id="form-crawler"></textarea>
+        <input name="action_type" id="form-action">
+    </form>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        async function runMagic() {
-            const rssUrl = document.getElementById('rss_url').value;
-            if(!rssUrl) return alert("Please enter RSS URL first");
+        // ============================
+        // CONFIG - لینک‌های شما جایگذاری شدند
+        // ============================
+        const N8N_MAGIC_WEBHOOK = "https://ehsansb-news-engine.hf.space/webhook/magic-selector";
+        const N8N_TEST_WEBHOOK = "https://ehsansb-news-engine.hf.space/webhook/send-test";
 
-            const btn = event.target;
-            btn.innerText = "Scanning...";
-            btn.disabled = true;
+        let currentConfig = {};
+        let rssList = [];
+        let crawlerList = [];
+        let selection = { type: null, id: null };
+        let lastCaretRange = null;
 
+        document.addEventListener('DOMContentLoaded', () => {
             try {
-                const response = await fetch('/proxy/magic', {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ url: rssUrl })
-                });
-                const data = await response.json();
+                currentConfig = JSON.parse('{{ variables_json | safe }}'); 
+                rssList = JSON.parse('{{ sources_json | safe }}');
+                crawlerList = JSON.parse('{{ crawlers_json | safe }}');
+                renderModules();
                 
-                if(data.var_1_css) document.getElementById('var_1_css').value = data.var_1_css;
-                if(data.var_2_css) document.getElementById('var_2_css').value = data.var_2_css;
-                alert("Magic detection complete!");
-            } catch (e) {
-                alert("Magic failed. Check n8n logs.");
-            } finally {
-                btn.innerText = "✨ Magic Auto-Detect";
-                btn.disabled = false;
+                const editor = document.getElementById('visual-editor');
+                const tmpl = `{{ channel.content_template | safe }}` || "";
+                editor.innerHTML = renderBadges(tmpl);
+                
+                editor.addEventListener('keyup', saveCaretPosition);
+                editor.addEventListener('mouseup', saveCaretPosition);
+                editor.addEventListener('click', (e) => {
+                    saveCaretPosition();
+                    if (e.target.classList.contains('var-badge')) {
+                        saveCurrentState();
+                        selectVariable(e.target.dataset.key);
+                    } else {
+                        if (selection.type === 'variable') {
+                            saveCurrentState();
+                            deselectAll();
+                        }
+                    }
+                });
+            } catch(e) { console.error("Init Error", e); }
+        });
+
+        window.addRSS = function() { saveCurrentState(); rssList.push({ url: "" }); selectRSS(rssList.length - 1); }
+        window.addCrawler = function() { saveCurrentState(); crawlerList.push({ url: "", extensions: "pdf,zip", upload_mode: "direct" }); selectCrawler(crawlerList.length - 1); }
+        window.addVariable = function() {
+            saveCurrentState();
+            let i = 1; while(currentConfig[`var_${i}`]) i++; const key = `var_${i}`;
+            restoreCaretPosition();
+            const badgeHtml = `<span class="var-badge" contenteditable="false" data-key="${key}">${key}</span>&nbsp;`;
+            document.execCommand('insertHTML', false, badgeHtml);
+            currentConfig[key] = { source: "", method: "css", command: "" };
+            setTimeout(() => selectVariable(key), 50);
+        }
+
+        window.selectRSS = function(index) { selection = { type: 'rss', id: index }; renderModules(); showInspector('inspector-rss'); document.getElementById('rss-url').value = rssList[index].url || ""; }
+        window.selectCrawler = function(index) { selection = { type: 'crawler', id: index }; renderModules(); showInspector('inspector-crawler'); const cr = crawlerList[index]; document.getElementById('cr-url').value = cr.url || ""; document.getElementById('cr-ext').value = cr.extensions || "pdf,zip"; document.getElementById('cr-mode').value = cr.upload_mode || "direct"; }
+        window.selectVariable = function(key) {
+            selection = { type: 'variable', id: key };
+            document.querySelectorAll('.var-badge').forEach(b => b.classList.remove('selected'));
+            const badge = document.querySelector(`.var-badge[data-key="${key}"]`);
+            if(badge) badge.classList.add('selected');
+            showInspector('inspector-variable');
+            const data = currentConfig[key] || {};
+            document.getElementById('var-key').value = key;
+            document.getElementById('var-source').value = data.source || "";
+            document.getElementById('var-method').value = data.method || "css";
+            document.getElementById('var-command').value = data.command || "";
+            updateUIForMethod();
+        }
+
+        window.deselectAll = function() { saveCurrentState(); selection = { type: null, id: null }; renderModules(); document.querySelectorAll('.var-badge').forEach(b => b.classList.remove('selected')); showInspector('inspector-global'); }
+
+        window.saveCurrentState = function() {
+            if (!selection.type) return;
+            if (selection.type === 'rss') { if(rssList[selection.id]) rssList[selection.id].url = document.getElementById('rss-url').value; }
+            else if (selection.type === 'crawler') { if(crawlerList[selection.id]) { crawlerList[selection.id].url = document.getElementById('cr-url').value; crawlerList[selection.id].extensions = document.getElementById('cr-ext').value; crawlerList[selection.id].upload_mode = document.getElementById('cr-mode').value; } }
+            else if (selection.type === 'variable') { const key = selection.id; currentConfig[key] = { source: document.getElementById('var-source').value, method: document.getElementById('var-method').value, command: document.getElementById('var-command').value }; }
+            document.getElementById('status-text').innerText = 'تغییرات ذخیره نشده...';
+        }
+
+        function renderModules() {
+            const container = document.getElementById('modules-container');
+            container.innerHTML = ''; 
+            if (rssList.length === 0 && crawlerList.length === 0) container.innerHTML = '<small class="text-muted ms-2 fst-italic">ماژولی اضافه نشده است.</small>';
+            else {
+                rssList.forEach((rss, index) => { const chip = document.createElement('div'); chip.className = `module-chip ${selection.type === 'rss' && selection.id === index ? 'selected' : ''}`; chip.innerHTML = `<i class="fa fa-rss"></i> RSS ${index+1}`; chip.onclick = () => { saveCurrentState(); selectRSS(index); }; container.appendChild(chip); });
+                crawlerList.forEach((cr, index) => { const chip = document.createElement('div'); chip.className = `module-chip ${selection.type === 'crawler' && selection.id === index ? 'selected' : ''}`; chip.innerHTML = `<i class="fa fa-spider"></i> Crawler ${index+1}`; chip.onclick = () => { saveCurrentState(); selectCrawler(index); }; container.appendChild(chip); });
             }
         }
 
-        async function runTest() {
-            const chatId = document.getElementById('test_chat_id').value;
-            if(!chatId) return alert("Enter your Test Chat ID");
+        function renderBadges(text) { if(!text) return ""; return text.replace(/\{\{(.*?)\}\}/g, (match, key) => { return `<span class="var-badge" contenteditable="false" data-key="${key}">${key}</span>`; }); }
+        function showInspector(id) { document.querySelectorAll('.inspector-section').forEach(el => el.classList.remove('active')); document.getElementById(id).classList.add('active'); }
+        window.deleteActiveObject = function() { if(!confirm("حذف شود؟")) return; if (selection.type === 'rss') rssList.splice(selection.id, 1); else if (selection.type === 'crawler') crawlerList.splice(selection.id, 1); else if (selection.type === 'variable') { delete currentConfig[selection.id]; const badge = document.querySelector(`.var-badge[data-key="${selection.id}"]`); if(badge) badge.remove(); } selection = {type:null, id:null}; deselectAll(); }
+        function saveCaretPosition() { const sel = window.getSelection(); if (sel.rangeCount > 0 && document.getElementById('visual-editor').contains(sel.getRangeAt(0).commonAncestorContainer)) lastCaretRange = sel.getRangeAt(0).cloneRange(); }
+        function restoreCaretPosition() { const editor = document.getElementById('visual-editor'); editor.focus(); const sel = window.getSelection(); sel.removeAllRanges(); if (lastCaretRange) sel.addRange(lastCaretRange); else { const range = document.createRange(); range.selectNodeContents(editor); range.collapse(false); sel.addRange(range); } }
+        window.updateUIForMethod = function() { const method = document.getElementById('var-method').value; const inp = document.getElementById('var-command'); const placeholders = { 'css': 'مثال: .price', 'regex': 'مثال: قیمت: (\\d+)', 'json': 'مثال: data.price', 'ai': 'توصیف کنید چه بخشی از متن را می‌خواهید' }; inp.placeholder = placeholders[method] || ""; }
+
+        function cleanTemplate(html) {
+            const temp = document.createElement("div");
+            temp.innerHTML = html;
+            temp.querySelectorAll('.var-badge').forEach(node => { const key = node.dataset.key; if(key) node.replaceWith('{' + '{' + key + '}' + '}'); });
+            temp.querySelectorAll("br").forEach(br => br.replaceWith("\n"));
+            temp.querySelectorAll("div").forEach(div => { if(div.innerHTML.trim()) div.before("\n"); });
+            return temp.innerText.trim();
+        }
+
+        window.submitForm = function(action) {
+            saveCurrentState();
+            document.getElementById('form-name').value = document.getElementById('inp-name').value;
+            document.getElementById('form-interval').value = document.getElementById('inp-interval').value;
+            document.getElementById('form-active').value = document.getElementById('inp-active').checked;
+            document.getElementById('form-btn-text').value = document.getElementById('inp-btn-text').value;
+            document.getElementById('form-token').value = document.getElementById('inp-token').value;
+            document.getElementById('form-channel-id').value = document.getElementById('inp-channel-id').value;
+            document.getElementById('form-test-id').value = document.getElementById('inp-test-id').value;
+            document.getElementById('form-template').value = cleanTemplate(document.getElementById('visual-editor').innerHTML);
+            document.getElementById('form-config').value = JSON.stringify(currentConfig);
+            document.getElementById('form-rss').value = JSON.stringify(rssList);
+            document.getElementById('form-crawler').value = JSON.stringify(crawlerList);
+            document.getElementById('form-action').value = action;
+            document.getElementById('main-form').submit();
+        }
+
+        window.sendTestMessage = async function() {
+            const chatId = document.getElementById('inp-test-id').value;
+            if (!chatId) { alert("لطفا ابتدا 'آیدی عددی مدیر' را در تنظیمات سمت راست وارد کنید و ذخیره کنید."); return; }
+
+            const btn = document.getElementById('btn-test');
+            const originalText = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> ارسال...`;
 
             try {
-                await fetch('/proxy/test', {
+                let rawHtml = document.getElementById('visual-editor').innerHTML;
+                rawHtml = cleanTemplate(rawHtml);
+
+                const response = await fetch(N8N_TEST_WEBHOOK, {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ 
-                        chat_id: chatId,
-                        message: "✅ Test successful from Admin Panel"
-                    })
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ chat_id: chatId, message: rawHtml })
                 });
-                alert("Test request sent to n8n");
-            } catch (e) {
-                alert("Test failed.");
+
+                if (response.ok) alert("✅ پیام تست ارسال شد.");
+                else alert("❌ خطا در ارسال پیام. (مطمئن شوید ربات را Start کرده‌اید)");
+            } catch (e) { alert("Error: " + e.message); } finally { btn.disabled = false; btn.innerHTML = originalText; }
+        }
+
+        window.runMagicBatch = async function() {
+            const groups = {};
+            let hasItems = false;
+            saveCurrentState();
+
+            for (const [key, conf] of Object.entries(currentConfig)) {
+                if (conf.source && conf.source.startsWith('http') && conf.command) {
+                    if (!groups[conf.source]) groups[conf.source] = [];
+                    groups[conf.source].push({ id: key, desc: conf.command, method: conf.method || 'css' });
+                    hasItems = true;
+                }
             }
+
+            if (!hasItems) { alert("لطفاً برای متغیرها 'لینک منبع' و 'توضیحات' را وارد کنید."); return; }
+
+            const btn = document.getElementById('btn-magic-all');
+            const originalText = btn.innerHTML;
+            btn.disabled = true;
+            btn.innerHTML = `<span class="spinner-border spinner-border-sm"></span> در حال جادو...`;
+
+            try {
+                for (const [url, items] of Object.entries(groups)) { await processGroup(url, items); }
+                alert("✨ انجام شد! کدها بروزرسانی شدند.");
+                if(selection.type === 'variable') selectVariable(selection.id);
+            } catch (err) { console.error(err); alert("خطا: " + err.message); } finally { btn.disabled = false; btn.innerHTML = originalText; }
+        }
+
+        async function processGroup(url, items) {
+            try {
+                const response = await fetch(N8N_MAGIC_WEBHOOK, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url: url, items: items })
+                });
+                if (!response.ok) throw new Error("Server Error");
+                const data = await response.json();
+                for (const [key, code] of Object.entries(data)) { if (currentConfig[key]) currentConfig[key].command = code; }
+            } catch (e) { console.error(`Failed for ${url}`, e); }
         }
     </script>
 </body>
