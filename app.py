@@ -1,96 +1,112 @@
+from flask import Flask, render_template, request, redirect, session
 import os
-import requests
 import psycopg2
 from psycopg2.extras import RealDictCursor
-from flask import Flask, render_template, request, redirect, url_for, jsonify
+import json
 
 app = Flask(__name__)
-app.secret_key = os.getenv("SECRET_KEY", "super-secret-key")
 
-# Database Connection (Port 6543 for Transaction Mode)
+# تنظیمات امنیتی و دیتابیس
+app.secret_key = os.getenv("SECRET_KEY", "CHANGE_THIS_TO_A_LONG_RANDOM_STRING")
 DB_URI = os.getenv("DB_URI")
+ADMIN_PASS = os.getenv("ADMIN_PASS", "admin123")
 
-def get_db_connection():
-    return psycopg2.connect(DB_URI, sslmode='require', cursor_factory=RealDictCursor)
+def get_db():
+    return psycopg2.connect(DB_URI, cursor_factory=RealDictCursor)
 
-@app.route('/')
-def index():
-    conn = get_db_connection()
-    cur = conn.cursor()
-    cur.execute("SELECT * FROM channels ORDER BY id DESC")
-    channels = cur.fetchall()
-    cur.close()
-    conn.close()
-    return render_template('index.html', channels=channels)
-
-@app.route('/channel/add', methods=['GET', 'POST'])
-def add_channel():
+@app.route('/', methods=['GET', 'POST'])
+def login():
     if request.method == 'POST':
-        data = request.form
-        conn = get_db_connection()
+        if request.form.get('password') == ADMIN_PASS:
+            session['logged_in'] = True
+            session.permanent = True 
+            return redirect('/dashboard')
+    return render_template('login.html')
+
+@app.route('/dashboard')
+def dashboard():
+    if not session.get('logged_in'): return redirect('/')
+    try:
+        conn = get_db()
         cur = conn.cursor()
-        cur.execute("""
-            INSERT INTO channels (name, rss_url, telegram_chat_id, bot_token, test_chat_id, 
-                                  var_1_name, var_1_css, var_2_name, var_2_css, is_active)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-        """, (data['name'], data['rss_url'], data['telegram_chat_id'], data['bot_token'], 
-              data.get('test_chat_id'), data['var_1_name'], data['var_1_css'], 
-              data['var_2_name'], data['var_2_css'], True))
-        conn.commit()
-        cur.close()
+        cur.execute("SELECT * FROM channels ORDER BY created_at DESC")
+        channels = cur.fetchall()
+        
+        # آمار پست‌های امروز
+        for c in channels:
+            cur.execute("SELECT COUNT(*) as cnt FROM news_queue WHERE channel_ref_id = %s AND created_at > NOW() - INTERVAL '1 day'", (c['id'],))
+            c['daily_usage_count'] = cur.fetchone()['cnt']
+            
         conn.close()
-        return redirect(url_for('index'))
-    return render_template('channel.html', channel=None)
+        return render_template('dashboard.html', channels=channels, msg=request.args.get('msg'))
+    except Exception as e:
+        return f"Database Error: {e}"
 
-@app.route('/channel/edit/<int:id>', methods=['GET', 'POST'])
-def edit_channel(id):
-    conn = get_db_connection()
+@app.route('/add_channel', methods=['POST'])
+def add_channel():
+    if not session.get('logged_in'): return redirect('/')
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        cur.execute("INSERT INTO channels (name, telegram_token, channel_id) VALUES (%s, %s, %s)",
+                    (request.form['name'], request.form['token'], request.form['channel_id']))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        return f"Error: {e}"
+    return redirect('/dashboard')
+
+@app.route('/channel/<uuid:id>')
+def channel_manager(id):
+    if not session.get('logged_in'): return redirect('/')
+    conn = get_db()
     cur = conn.cursor()
-    if request.method == 'POST':
-        data = request.form
+    cur.execute("SELECT * FROM channels WHERE id = %s", (str(id),))
+    channel = cur.fetchone()
+    conn.close()
+    
+    if not channel: return "Not Found"
+    
+    def ensure_json(data):
+        if isinstance(data, str): return data
+        return json.dumps(data or [])
+
+    return render_template('channel.html', 
+                           channel=channel, 
+                           variables_json=json.dumps(channel.get('variables_config') or {}),
+                           sources_json=ensure_json(channel.get('rss_config')),
+                           crawlers_json=ensure_json(channel.get('crawler_config')))
+
+@app.route('/update_channel/<uuid:id>', methods=['POST'])
+def update_channel(id):
+    if not session.get('logged_in'): return redirect('/')
+    data = request.form
+    try:
+        conn = get_db()
+        cur = conn.cursor()
+        
+        active = True if data.get('channel_active') == 'true' or data.get('channel_active') == 'on' else False
+        
+        # ذخیره تمام اطلاعات شامل آیدی تست و توکن‌ها
         cur.execute("""
             UPDATE channels SET 
-                name=%s, rss_url=%s, telegram_chat_id=%s, bot_token=%s, test_chat_id=%s,
-                var_1_name=%s, var_1_css=%s, var_2_name=%s, var_2_css=%s, is_active=%s
+            name=%s, interval=%s, active=%s, button_text=%s,
+            telegram_token=%s, channel_id=%s, test_chat_id=%s,
+            content_template=%s, variables_config=%s, rss_config=%s, crawler_config=%s
             WHERE id=%s
-        """, (data['name'], data['rss_url'], data['telegram_chat_id'], data['bot_token'], 
-              data.get('test_chat_id'), data['var_1_name'], data['var_1_css'], 
-              data['var_2_name'], data['var_2_css'], 'is_active' in data, id))
+        """, (
+            data['name'], data['interval'], active, data['button_text'],
+            data['telegram_token'], data['channel_id'], data['test_chat_id'],
+            data['content_template'],
+            data['variables_config'], data['rss_config'], data['crawler_config'],
+            str(id)
+        ))
         conn.commit()
-        return redirect(url_for('index'))
-    
-    cur.execute("SELECT * FROM channels WHERE id = %s", (id,))
-    channel = cur.fetchone()
-    cur.close()
-    conn.close()
-    return render_template('channel.html', channel=channel)
-
-# --- N8N PROXY ROUTES ---
-
-@app.route('/proxy/magic', methods=['POST'])
-def proxy_magic():
-    webhook_url = os.getenv("N8N_MAGIC_WEBHOOK_URL")
-    if not webhook_url:
-        return jsonify({"error": "N8N_MAGIC_WEBHOOK_URL not set"}), 500
-    
-    try:
-        # Forward the request to n8n
-        response = requests.post(webhook_url, json=request.json, timeout=30)
-        return jsonify(response.json())
+        conn.close()
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@app.route('/proxy/test', methods=['POST'])
-def proxy_test():
-    webhook_url = os.getenv("N8N_TEST_WEBHOOK_URL")
-    if not webhook_url:
-        return jsonify({"error": "N8N_TEST_WEBHOOK_URL not set"}), 500
-    
-    try:
-        response = requests.post(webhook_url, json=request.json, timeout=30)
-        return jsonify({"status": "sent", "n8n_response": response.status_code})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        return f"Error saving: {e}"
+        
+    return redirect(f'/channel/{id}')
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000)
