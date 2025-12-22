@@ -127,11 +127,12 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
-        // ============================
-        // CONFIG - لینک‌های شما جایگذاری شدند
-        // ============================
+        // =========================================================================
+        // ⚠️ تنظیمات حیاتی: اینجا آدرس‌های n8n را تعریف می‌کنیم
+        // =========================================================================
         const N8N_MAGIC_WEBHOOK = "https://ehsansb-news-engine.hf.space/webhook/magic-selector";
         const N8N_TEST_WEBHOOK = "https://ehsansb-news-engine.hf.space/webhook/send-test";
+        // =========================================================================
 
         let currentConfig = {};
         let rssList = [];
@@ -261,6 +262,7 @@
                 let rawHtml = document.getElementById('visual-editor').innerHTML;
                 rawHtml = cleanTemplate(rawHtml);
 
+                // درخواست مستقیم به n8n بدون دخالت Flask
                 const response = await fetch(N8N_TEST_WEBHOOK, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
